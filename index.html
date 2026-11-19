@@ -2,19 +2,282 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Part Research Request</title>
+    <!-- Bootstrap 5 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <!-- DataTables + Bootstrap 5 theme -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <style>
-      @import "./src/style.css";
+      body {
+        background-color: #f8f9fa;
+        font-size: 14px;
+      }
+      #partsTable thead th {
+        white-space: nowrap;
+      }
+      .status-cell {
+        cursor: pointer;
+        user-select: none;
+      }
+      .status-cell:hover .badge {
+        opacity: 0.85;
+      }
+      #statusDropdown {
+        position: fixed;
+        z-index: 9999;
+        min-width: 140px;
+        display: none;
+        background: #fff;
+        border: 1px solid rgba(0,0,0,.15);
+        border-radius: .375rem;
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+        padding: .25rem 0;
+      }
+      #statusDropdown .status-option {
+        padding: .4rem .9rem;
+        cursor: pointer;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      #statusDropdown .status-option:hover {
+        background-color: #f0f0f0;
+      }
     </style>
-    <title>JSDev</title>
   </head>
   <body>
-    <h1>Alright. You're set.</h1>
-      <h2 class="tintedBlackLeft">Now build something amazing!</h2>
-      <p>JS in FM is amazing</p>
-    <button type="button">Click Me!</button>
+    <!-- Status picker dropdown -->
+    <div id="statusDropdown">
+      <div class="status-option" data-status="New"><span class="badge bg-primary me-2">New</span></div>
+      <div class="status-option" data-status="In Progress"><span class="badge bg-warning text-dark me-2">In Progress</span></div>
+      <div class="status-option" data-status="Complete"><span class="badge bg-success me-2">Complete</span></div>
+      <div class="status-option" data-status="On Hold"><span class="badge bg-secondary me-2">On Hold</span></div>
+      <div class="status-option" data-status="Cancelled"><span class="badge bg-danger me-2">Cancelled</span></div>
+    </div>
 
-    <script type="module">
-      import "./src/index.js";
+    <div class="container-fluid p-3">
+      <table id="partsTable" class="table table-striped table-hover table-bordered align-middle" style="width:100%">
+        <thead class="table-dark">
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Manufacturer</th>
+            <th>Model</th>
+            <th>Serial</th>
+            <th>User</th>
+            <th>Status</th>
+            <th>Photo</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- jQuery (required by DataTables) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+      var dataTable = null;
+      var pendingData = null; // holds data if FM calls loadData before DT is ready
+
+      function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = String(str == null ? '' : str);
+        return div.innerHTML;
+      }
+
+      function statusBadge(status) {
+        var colorMap = {
+          'New': 'primary',
+          'In Progress': 'warning text-dark',
+          'Complete': 'success',
+          'Cancelled': 'danger',
+          'On Hold': 'secondary'
+        };
+        var color = colorMap[status] || 'secondary';
+        return '<span class="badge bg-' + color + '">' + escapeHtml(status) + '</span>';
+      }
+
+      function statusSortValue(status) {
+        var statusOrder = {
+          'New': 0,
+          'In Progress': 1,
+          'On Hold': 2,
+          'Complete': 3,
+          'Cancelled': 4
+        };
+
+        return Object.prototype.hasOwnProperty.call(statusOrder, status) ? statusOrder[status] : 999;
+      }
+
+      $(document).ready(function () {
+        dataTable = $('#partsTable').DataTable({
+          data: [],
+          order: [[6, 'asc']],
+          columns: [
+            { data: 'Date',  defaultContent: '' },
+            { data: 'Description',  defaultContent: '' },
+            { data: 'Manufacturer', defaultContent: '' },
+            { data: 'Model',        defaultContent: '' },
+            { data: 'Serial',       defaultContent: '' },
+            { data: 'zzCreatedAcct',       defaultContent: '' },
+            {
+              data: 'Status',
+              defaultContent: '',
+              orderable: true,
+              createdCell: function (td) { td.classList.add('status-cell'); },
+              render: function (data, type) {
+                if (type === 'sort' || type === 'type') {
+                  return statusSortValue(data || '');
+                }
+
+                return statusBadge(data || '');
+              }
+            },
+            {
+              data: 'Picture',
+              defaultContent: '',
+              orderable: false,
+              className: 'text-center photo-cell',
+              render: function (data) {
+                var hasPhoto = data && String(data).trim() !== '';
+                var colorClass = hasPhoto ? 'text-primary' : 'text-secondary';
+                return '<button class="btn btn-sm btn-link p-0 photo-btn ' + colorClass + '" title="View Photo"><i class="bi bi-camera-fill fs-5"></i></button>';
+              }
+            },
+
+          ],
+          paging: false,
+          searching: true,
+          ordering: true,
+          info: false,
+          autoWidth: false,
+          scrollY: 'calc(100vh - 80px)',
+          scrollCollapse: true
+        });
+
+        // Load any data that arrived before the table was ready
+        if (pendingData !== null) {
+          dataTable.clear().rows.add(pendingData).draw();
+          pendingData = null;
+        }
+
+        // --- Status cell click handler ---
+        var $dropdown = $('#statusDropdown');
+        var activeRowData = null;
+        var activeTr = null;
+
+        $('#partsTable tbody').on('click', 'td.status-cell', function (e) {
+          e.stopPropagation();
+          activeTr = $(this).closest('tr')[0];
+          // Shallow copy so we have a stable snapshot of the row data
+          activeRowData = $.extend({}, dataTable.row(activeTr).data());
+
+          var rect = this.getBoundingClientRect();
+          var dropH = $dropdown.outerHeight(true) || 160;
+          var top = (rect.bottom + dropH > window.innerHeight)
+            ? rect.top - dropH
+            : rect.bottom;
+
+          $dropdown.css({ top: top, left: rect.left }).show();
+        });
+
+        $dropdown.on('click', '.status-option', function (e) {
+          e.stopPropagation();
+          var newStatus = $(this).data('status');
+          $dropdown.hide();
+
+          if (!activeRowData || !activeTr) { return; }
+          if (newStatus === activeRowData.Status) { return; }
+
+          // Build param from stable snapshot BEFORE any DT/DOM changes
+          var param = JSON.stringify({
+            mode:         "statusChange",
+            __ID:         activeRowData.__ID,
+            Description:  activeRowData.Description,
+            Manufacturer: activeRowData.Manufacturer,
+            Model:        activeRowData.Model,
+            Serial:       activeRowData.Serial,
+            status:       newStatus
+          });
+
+          // Update DT internal data and redraw
+          try {
+            var dtRow = dataTable.row(activeTr);
+            var rowData = dtRow.data();
+            rowData.Status = newStatus;
+            dtRow.invalidate().draw(false);
+          } catch (dtErr) { /* ignore */ }
+
+          // Call FileMaker script — deferred to escape event handler context
+          var scriptName = 'Manage: Part Research Request';
+          setTimeout(function () {
+            try {
+              if (typeof FileMaker !== 'undefined') {
+                FileMaker.PerformScript(scriptName, param);
+              }
+            } catch (fmErr) { /* ignore */ }
+          }, 0);
+
+          activeRowData = null;
+          activeTr = null;
+        });
+
+        // --- Photo button click handler ---
+        $('#partsTable tbody').on('click', 'td.photo-cell .photo-btn', function (e) {
+          e.stopPropagation();
+          var tr = $(this).closest('tr')[0];
+          var rowData = dataTable.row(tr).data();
+          var param = JSON.stringify({
+            mode:  'Picture',
+            __ID:  rowData.__ID
+          });
+          var scriptName = 'Manage: Part Research Request';
+          setTimeout(function () {
+            try {
+              if (typeof FileMaker !== 'undefined') {
+                FileMaker.PerformScript(scriptName, param);
+              }
+            } catch (fmErr) { /* ignore */ }
+          }, 0);
+        });
+
+        // Close dropdown on outside click
+        $(document).on('click', function () {
+          $dropdown.hide();
+          activeRowData = null;
+          activeTr = null;
+        });
+
+        // Re-sync header column widths when the window is resized
+        $(window).on('resize', function () {
+          dataTable.columns.adjust();
+        });
+      });
+
+      /**
+       * Called by FileMaker via:
+       *   Perform JavaScript In Web Viewer [ loadData(jsonString) ]
+       *
+       * @param {string} jsonString - JSON array of part records
+       */
+      window.loadData = function (jsonString) {
+        try {
+          var data = JSON.parse(jsonString);
+          if (dataTable) {
+            dataTable.clear().rows.add(data).draw();
+          } else {
+            pendingData = data;
+          }
+        } catch (e) { /* ignore */ }
+      };
     </script>
   </body>
 </html>
